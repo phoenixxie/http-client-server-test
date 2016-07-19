@@ -4,6 +4,7 @@ namespace pillr\library\http;
 
 use Psr\Http\Message\MessageInterface as MessageInterface;
 use Psr\Http\Message\StreamInterface as StreamInterface;
+use Psr\Log\InvalidArgumentException   as InvalidArgumentException;
 /**
  * HTTP messages consist of requests from a client to a server and responses
  * from a server to a client. This interface defines the methods common to
@@ -18,6 +19,46 @@ use Psr\Http\Message\StreamInterface as StreamInterface;
  */
 class Message implements MessageInterface
 {
+
+    protected $version;
+    protected $headers;
+    protected $headerLowerNames;
+    protected $body;
+
+    function __construct($version, $headers, StreamInterface $body)
+    {
+        if ($version != "1.0" && $version != "1.1") {
+            throw new InvalidArgumentException();
+        }
+        $this->version = $version;
+
+        if ($body instanceof StreamInterface == false) {
+            throw new InvalidArgumentException();
+        }
+        $this->body = $body;
+
+        if (!is_array($headers)) {
+            throw new InvalidArgumentException();
+        }
+
+        $this->headers = array();
+        $this->headerLowerNames = array();
+        foreach ($headers as $key => $value) {
+            if (!is_string($key)) {
+                throw new InvalidArgumentException();
+            }
+            if (!is_array($value)) {
+                $value = array((string)$value);
+            }
+            $this->setHeader($key, $value);
+        }
+    }
+
+    function __clone()
+    {
+        $this->body = clone $this->body;
+    }
+
     /**
      * Retrieves the HTTP protocol version as a string.
      *
@@ -27,7 +68,7 @@ class Message implements MessageInterface
      */
     public function getProtocolVersion()
     {
-
+        return $this->version;
     }
 
     /**
@@ -45,7 +86,12 @@ class Message implements MessageInterface
      */
     public function withProtocolVersion($version)
     {
-
+        if ($version != "1.0" && $version != "1.1") {
+            throw new InvalidArgumentException();
+        }
+        $newobj = clone $this;
+        $newobj->version = $version;
+        return $newobj;
     }
 
     /**
@@ -75,7 +121,23 @@ class Message implements MessageInterface
      */
     public function getHeaders()
     {
+        return $this->headers;
+    }
 
+    /**
+     * Try to get the original name of a header by the given case-insensitive name.
+     *
+     * @param string $name Case-insensitive header field name.
+     * @return string Returns the original name if the name exists, return NULL otherwise.
+     */
+    private function getHeaderOrigName($name)
+    {
+        $name = strtolower($name);
+        if (array_key_exists($name, $this->headerLowerNames)) {
+            return $this->headerLowerNames[$name];
+        } else {
+            return NULL;
+        }
     }
 
     /**
@@ -88,7 +150,7 @@ class Message implements MessageInterface
      */
     public function hasHeader($name)
     {
-
+        return $this->getHeaderOrigName($name) !== NULL;
     }
 
     /**
@@ -107,7 +169,12 @@ class Message implements MessageInterface
      */
     public function getHeader($name)
     {
-
+        $name = $this->getHeaderOrigName($name);
+        if ($name !== NULL) {
+            return $this->headers[$name];
+        } else {
+            return array();
+        }
     }
 
     /**
@@ -131,7 +198,37 @@ class Message implements MessageInterface
      */
     public function getHeaderLine($name)
     {
+        $parts = $this->getHeader($name);
+        return implode(",", $parts);
+    }
 
+    /**
+     * Set the header with the provided value replacing the specified header.
+     *
+     * While header names are case-insensitive, the casing of the header will
+     * be preserved by this function, and returned from getHeaders().
+     *
+     * @param string $name Case-insensitive header field name.
+     * @param string[] $value Header values.
+     */
+    private function setHeader($name, $value)
+    {
+        $origName = $this->getHeaderOrigName($name);
+        $lower = strtolower($name);
+
+        if ($origName === NULL) {
+            $this->headers[$name] = $value;
+            $this->headerLowerNames[$lower] = $name;
+
+        } else {
+            if (0 == strcmp($origName, $name)) {
+                $this->headers[$name] = $value;
+            } else {
+                unset($this->headers[$origName]);
+                $this->headers[$name] = $value;
+                $this->headerLowerNames[$lower] = $name;
+            }
+        }
     }
 
     /**
@@ -151,7 +248,22 @@ class Message implements MessageInterface
      */
     public function withHeader($name, $value)
     {
+        if (!is_string($name) || $name == '') {
+            throw new InvalidArgumentException();
+        }
 
+        if (!is_array($value) && !is_string($value)) {
+            throw new InvalidArgumentException();
+        }
+
+        if (is_string($value)) {
+            $value = array($value);
+        }
+
+        $newobj = clone $this;
+        $newobj->setHeader($name, $value);
+
+        return $newobj;
     }
 
     /**
@@ -173,7 +285,25 @@ class Message implements MessageInterface
      */
     public function withAddedHeader($name, $value)
     {
+        if (!is_string($name) || $name == '') {
+            throw new InvalidArgumentException();
+        }
+        if (!is_array($value)) {
+            $value = array((string)$value);
+        }
 
+        $newobj = clone $this;
+        $orig = $newobj->getHeaderOrigName($name);
+        if ($orig === NULL) {
+            $newobj->setHeader($name, $value);
+        } else {
+            $orig = $newobj->getHeaderOrigName($name);
+            foreach ($value as $v) {
+                array_push($newobj->header[$orig], $v);
+            }
+        }
+
+        return $newobj;
     }
 
     /**
@@ -190,7 +320,14 @@ class Message implements MessageInterface
      */
     public function withoutHeader($name)
     {
+        $newobj = clone $this;
+        $orig = $newobj->getHeaderOrigName($name);
+        if ($orig !== NULL) {
+            unset($newobj->header[$orig]);
+            unset($newobj->headerLowerNames[strtolower($name)]);
+        }
 
+        return $newobj;
     }
 
     /**
@@ -200,7 +337,7 @@ class Message implements MessageInterface
      */
     public function getBody()
     {
-
+        return $this->body;
     }
 
     /**
@@ -218,6 +355,11 @@ class Message implements MessageInterface
      */
     public function withBody(StreamInterface $body)
     {
-
+        if ($body instanceof StreamInterface == false) {
+            throw new InvalidArgumentException();
+        }
+        $newobj = clone $this;
+        $newobj->body = $body;
+        return $newobj;
     }
 }

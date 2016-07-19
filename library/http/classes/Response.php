@@ -6,6 +6,8 @@ use \Psr\Http\Message\ResponseInterface as ResponseInterface;
 
 use \pillr\library\http\Message         as  Message;
 
+use \Psr\Log\InvalidArgumentException   as InvalidArgumentException;
+
 /**
  * Representation of an outgoing, server-side response.
  *
@@ -23,6 +25,47 @@ use \pillr\library\http\Message         as  Message;
  */
 class Response extends Message implements ResponseInterface
 {
+    protected $statusCode;
+    protected $reason;
+
+    public static function getReasonByCode($statusCode)
+    {
+        switch ($statusCode) {
+        case 200: return "OK"; break;
+        case 301: return "Moved Permanently"; break;
+        case 302: return "Found"; break;
+        case 401: return "Unauthorized"; break;
+        case 403: return "Forbidden"; break;
+        case 404: return "Not Found"; break;
+        case 500: return "Internal Server Error"; break;
+        /*
+         * ...
+         * ...
+         * ...
+         */
+        default:
+        }
+    }
+
+
+    public function __construct($version, $statusCode, $reason, $headers, $body)
+    {
+        parent::__construct($version, $headers, new Stream($body));
+
+        $statusCode = intval($statusCode);
+
+        if ($statusCode < 100 || $statusCode > 1000) {
+            throw new InvalidArgumentException();
+        }
+        $this->statusCode = $statusCode;
+
+        if ($reason != '') {
+            $this->reason = $reason;
+        } else {
+            $this->reason = Response::getReasonByCode($statusCode);
+        }
+    }
+
     /**
      * Gets the response status code.
      *
@@ -33,7 +76,7 @@ class Response extends Message implements ResponseInterface
      */
     public function getStatusCode()
     {
-
+        return $this->statusCode;
     }
 
     /**
@@ -58,7 +101,21 @@ class Response extends Message implements ResponseInterface
      */
     public function withStatus($code, $reasonPhrase = '')
     {
+        $code = intval($code);
+        if ($code < 100 || $code > 1000) {
+            throw new InvalidArgumentException();
+        }
 
+        $newobj = clone $this;
+        $newobj->statusCode = $code;
+
+        if ($reasonPhrase != '') {
+            $newobj->reason = $reasonPhrase;
+        } else {
+            $newobj->reason = Response::getReasonByCode($code);
+        }
+
+        return $newobj;
     }
 
     /**
@@ -76,6 +133,6 @@ class Response extends Message implements ResponseInterface
      */
     public function getReasonPhrase()
     {
-
+        return $this->reason;
     }
 }

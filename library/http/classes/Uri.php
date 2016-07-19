@@ -24,6 +24,20 @@ use \Psr\Http\Message\UriInterface as UriInterface;
  */
 class Uri implements UriInterface
 {
+    protected $uri;
+
+    public function __construct($uri)
+    {
+        if ($uri instanceof Uri) {
+            $this->uri = (string)$uri->uri;
+        } else {
+            $uri = (string)$uri;
+            if (!filter_var($uri, FILTER_VALIDATE_URL)) {
+                throw new InvalidArgumentException();
+            }
+            $this->uri = $uri;
+        }
+    }
     
     /**
      * Retrieve the scheme component of the URI.
@@ -369,7 +383,7 @@ class Uri implements UriInterface
      */
     public function __toString()
     {
-        
+        return $this->uri;   
     }
 
 }

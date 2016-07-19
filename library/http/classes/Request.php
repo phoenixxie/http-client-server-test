@@ -7,6 +7,8 @@ use \Psr\Http\Message\RequestInterface  as  RequestInterface;
 use \Psr\Http\Message\UriInterface      as  UriInterface;
 
 use \pillr\library\http\Message         as  Message;
+use \Psr\Log\InvalidArgumentException   as InvalidArgumentException;
+
 /**
  * Representation of an outgoing, client-side request.
  *
@@ -28,7 +30,21 @@ use \pillr\library\http\Message         as  Message;
  */
 class Request extends Message implements RequestInterface
 {
+    protected $method;
+    protected $uri;
 
+    function __construct($version, $method, $uri, $headers, $body)
+    {
+        parent::__construct($version, $headers, new Stream($body));
+        $this->method = $method;
+        $this->uri = $uri;
+    }
+
+    function __clone()
+    {
+        parent::__clone();
+        $this->uri = clone $this->uri;
+    }
 
     /**
      * Retrieves the message's request target.
@@ -48,7 +64,7 @@ class Request extends Message implements RequestInterface
      */
     public function getRequestTarget()
     {
-
+        return (string)$this->uri;
     }
 
     /**
@@ -70,7 +86,12 @@ class Request extends Message implements RequestInterface
      */
     public function withRequestTarget($requestTarget)
     {
-
+        if (!filter_var($requestTarget, FILTER_VALIDATE_URL)) {
+            throw new InvalidArgumentException();
+        }
+        $newobj = clone $this;
+        $newobj->uri = new Uri($requestTarget);
+        return $newobj;
     }
 
     /**
@@ -80,7 +101,7 @@ class Request extends Message implements RequestInterface
      */
     public function getMethod()
     {
-
+        return $this->method;
     }
 
     /**
@@ -100,7 +121,13 @@ class Request extends Message implements RequestInterface
      */
     public function withMethod($method)
     {
+        if (!is_string($method)) {
+            throw new InvalidArgumentException();
+        }
 
+        $newobj = clone $this;
+        $newobj->method = $method;
+        return $newobj;
     }
 
     /**
@@ -114,6 +141,7 @@ class Request extends Message implements RequestInterface
      */
     public function getUri()
     {
+        return $this->uri;
 
     }
 
@@ -149,7 +177,17 @@ class Request extends Message implements RequestInterface
      */
     public function withUri(UriInterface $uri, $preserveHost = false)
     {
+        $newobj = clone $this;
+        $newobj->uri = $uri;
 
+        if ($preserveHost && $uri != NULL) {
+            $host = $newobj->getHeader('Host');
+            if (count($host) == 0) {
+                $newobj->setHeader('Host', array((string)$uri));
+            }
+        }
+
+        return $newobj;
     }
 
 

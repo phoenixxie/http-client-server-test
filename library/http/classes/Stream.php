@@ -12,6 +12,20 @@ use \Psr\Http\Message\StreamInterface as StreamInterface;
  */
 class Stream implements StreamInterface
 {
+    private $data;
+    private $pointer;
+    private $size;
+
+    public function __construct($data)
+    {
+        if (!is_string($data)) {
+            throw new InvalidArgumentException();
+        }
+        $this->data = $data;
+        $this->pointer = 0;
+        $this->size = strlen($data);
+    }
+
     /**
      * Reads all data from the stream into a string, from the beginning to end.
      *
@@ -28,7 +42,7 @@ class Stream implements StreamInterface
      */
     public function __toString()
     {
-
+        return $this->data;
     }
 
     /**
@@ -50,7 +64,7 @@ class Stream implements StreamInterface
      */
     public function detach()
     {
-
+        return null;
     }
 
     /**
@@ -60,7 +74,7 @@ class Stream implements StreamInterface
      */
     public function getSize()
     {
-
+        return $this->size;
     }
 
     /**
@@ -71,7 +85,7 @@ class Stream implements StreamInterface
      */
     public function tell()
     {
-
+        return $this->pointer;
     }
 
     /**
@@ -81,7 +95,7 @@ class Stream implements StreamInterface
      */
     public function eof()
     {
-
+        return $this->pointer == $this->size;
     }
 
     /**
@@ -91,7 +105,7 @@ class Stream implements StreamInterface
      */
     public function isSeekable()
     {
-
+        return true;
     }
 
     /**
@@ -108,7 +122,27 @@ class Stream implements StreamInterface
      */
     public function seek($offset, $whence = SEEK_SET)
     {
+        $next = 0;
 
+        switch ($whence) {
+        case SEEK_SET:
+            $next = $offset;
+            break;
+        case SEEK_CUR:
+            $next = $this->pointer + $offset;
+            break;
+        case SEEK_END:
+            $next = $this->size - $offset;
+            break;
+        default:
+            throw new RuntimeException();
+        }
+
+        if ($next < 0 || $next >= $this->size) {
+            throw new RuntimeException();
+        }
+
+        $this->pointer = $next;
     }
 
     /**
@@ -123,7 +157,7 @@ class Stream implements StreamInterface
      */
     public function rewind()
     {
-
+        $this->pointer = 0;
     }
 
     /**
@@ -133,7 +167,7 @@ class Stream implements StreamInterface
      */
     public function isWritable()
     {
-
+        return false;
     }
 
     /**
@@ -145,7 +179,7 @@ class Stream implements StreamInterface
      */
     public function write($string)
     {
-
+        throw new RuntimeException();
     }
 
     /**
@@ -155,7 +189,7 @@ class Stream implements StreamInterface
      */
     public function isReadable()
     {
-
+        return true;
     }
 
     /**
@@ -170,7 +204,18 @@ class Stream implements StreamInterface
      */
     public function read($length)
     {
+        if ($this->pointer == $this->size) {
+            return '';
+        }
 
+        $end = $this->pointer + $length;
+        if ($end > $this->size) {
+            $end = $this->size;
+        }
+
+        $ret = substr($this->data, $this->pointer, $end - $this->pointer);
+        $this->pointer = $end;
+        return $ret;
     }
 
     /**
@@ -182,7 +227,13 @@ class Stream implements StreamInterface
      */
     public function getContents()
     {
+        if ($this->pointer == $this->size) {
+            return '';
+        }
 
+        $ret = substr($this->data, $this->pointer);
+        $this->pointer = $this->size;
+        return $ret;
     }
 
     /**
@@ -199,6 +250,22 @@ class Stream implements StreamInterface
      */
     public function getMetadata($key = null)
     {
-        
+        $arr = array(
+            'timed_out' => false,
+            'blocked' => false,
+            'eof' => ($this->size == $this->pointer),
+            'unread_bytes' => $this->size - $this->pointer,
+            'stream_type' => 'string',
+            'wrapper_type' => 'string',
+            'wrapper_data' => $this->data,
+            'mode' => 'r',
+            'seekable' => true,
+            'uri' => '',
+        );
+        if ($key == null) {
+            return $arr;
+        } else {
+            return $arr[$key];
+        }
     }
 }
